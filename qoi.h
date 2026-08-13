@@ -88,23 +88,26 @@ bool QoiEncode(uint32_t width, uint32_t height, uint8_t channels, uint8_t colors
                 history[index_pos][2] == b && history[index_pos][3] == a) {
                 QoiWriteU8(QOI_OP_INDEX_TAG | static_cast<uint8_t>(index_pos));
             } else {
-                int vr = static_cast<int>(r) - static_cast<int>(pre_r);
-                int vg = static_cast<int>(g) - static_cast<int>(pre_g);
-                int vb = static_cast<int>(b) - static_cast<int>(pre_b);
-                int va = static_cast<int>(a) - static_cast<int>(pre_a);
+                history[index_pos][0] = r;
+                history[index_pos][1] = g;
+                history[index_pos][2] = b;
+                history[index_pos][3] = a;
 
-                if (va == 0) {
+                if (a == pre_a) {
+                    int8_t vr = static_cast<int8_t>(r) - static_cast<int8_t>(pre_r);
+                    int8_t vg = static_cast<int8_t>(g) - static_cast<int8_t>(pre_g);
+                    int8_t vb = static_cast<int8_t>(b) - static_cast<int8_t>(pre_b);
+                    int8_t vg_r = vr - vg;
+                    int8_t vg_b = vb - vg;
+
                     if (vr > -3 && vr < 2 && vg > -3 && vg < 2 && vb > -3 && vb < 2) {
                         QoiWriteU8(QOI_OP_DIFF_TAG |
                                    static_cast<uint8_t>((vr + 2) << 4) |
                                    static_cast<uint8_t>((vg + 2) << 2) |
                                    static_cast<uint8_t>(vb + 2));
-                    } else if (vg > -33 && vg < 32 &&
-                               (vr - vg) > -9 && (vr - vg) < 8 &&
-                               (vb - vg) > -9 && (vb - vg) < 8) {
+                    } else if (vg_r > -9 && vg_r < 8 && vg > -33 && vg < 32 && vg_b > -9 && vg_b < 8) {
                         QoiWriteU8(QOI_OP_LUMA_TAG | static_cast<uint8_t>(vg + 32));
-                        QoiWriteU8(static_cast<uint8_t>(((vr - vg + 8) << 4) |
-                                                        (vb - vg + 8)));
+                        QoiWriteU8(static_cast<uint8_t>(((vg_r + 8) << 4) | (vg_b + 8)));
                     } else {
                         QoiWriteU8(QOI_OP_RGB_TAG);
                         QoiWriteU8(r);
@@ -118,11 +121,6 @@ bool QoiEncode(uint32_t width, uint32_t height, uint8_t channels, uint8_t colors
                     QoiWriteU8(b);
                     QoiWriteU8(a);
                 }
-
-                history[index_pos][0] = r;
-                history[index_pos][1] = g;
-                history[index_pos][2] = b;
-                history[index_pos][3] = a;
             }
         }
 
@@ -179,7 +177,16 @@ bool QoiDecode(uint32_t &width, uint32_t &height, uint8_t &channels, uint8_t &co
             --run;
         } else {
             uint8_t byte = QoiReadU8();
-            if ((byte & QOI_MASK_2) == QOI_OP_INDEX_TAG) {
+            if (byte == QOI_OP_RGB_TAG) {
+                r = QoiReadU8();
+                g = QoiReadU8();
+                b = QoiReadU8();
+            } else if (byte == QOI_OP_RGBA_TAG) {
+                r = QoiReadU8();
+                g = QoiReadU8();
+                b = QoiReadU8();
+                a = QoiReadU8();
+            } else if ((byte & QOI_MASK_2) == QOI_OP_INDEX_TAG) {
                 int index_pos = byte & 0x3f;
                 r = history[index_pos][0];
                 g = history[index_pos][1];
@@ -197,15 +204,6 @@ bool QoiDecode(uint32_t &width, uint32_t &height, uint8_t &channels, uint8_t &co
                 r = static_cast<uint8_t>(r + vg_r + vg);
                 g = static_cast<uint8_t>(g + vg);
                 b = static_cast<uint8_t>(b + vg_b + vg);
-            } else if (byte == QOI_OP_RGB_TAG) {
-                r = QoiReadU8();
-                g = QoiReadU8();
-                b = QoiReadU8();
-            } else if (byte == QOI_OP_RGBA_TAG) {
-                r = QoiReadU8();
-                g = QoiReadU8();
-                b = QoiReadU8();
-                a = QoiReadU8();
             } else if ((byte & QOI_MASK_2) == QOI_OP_RUN_TAG) {
                 run = byte & 0x3f;
             }
